@@ -5,7 +5,7 @@ const CompileStep = std.Build.Step.Compile;
 /// set this to true to link libc
 const should_link_libc = false;
 
-const required_zig_version = std.SemanticVersion.parse("0.12.0-dev.1754+2a3226453") catch unreachable;
+const required_zig_version = std.SemanticVersion.parse("0.11.0") catch unreachable;
 
 fn linkObject(b: *Build, obj: *CompileStep) void {
     if (should_link_libc) obj.linkLibC();
@@ -34,7 +34,8 @@ pub fn build(b: *Build) void {
     });
 
     const run_generate = b.addRunArtifact(build_generate);
-    run_generate.setCwd(.{ .path = std.fs.path.dirname(@src().file).? });
+    run_generate.cwd = std.fs.path.dirname(@src().file);
+
     generate.dependOn(&run_generate.step);
 
     // Set up an exe for each day
