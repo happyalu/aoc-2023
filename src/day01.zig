@@ -56,84 +56,30 @@ fn getCalibrationPart2(line: []const u8) u32 {
     var prevDigit: ?u8 = null;
     var i: usize = 0;
 
-    while (i < line.len) {
-        //print("{s} {d}\n", .{ line, i });
+    const digit_names = [_][]const u8{ "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
+
+    while (i < line.len) : (i += 1) {
         var c: u8 = line[i];
         if (std.ascii.isDigit(c)) {
-            prevDigit = c;
+            prevDigit = c - '0';
         } else {
-            switch (c) {
-                'o' => {
-                    if (i + 3 <= line.len and (std.mem.eql(u8, line[i .. i + 3], "one"))) {
-                        prevDigit = '1';
-                        //i += 2;
-                        //print("found one\n", .{});
-                    }
-                },
-                't' => {
-                    if (i + 3 <= line.len and std.mem.eql(u8, line[i .. i + 3], "two")) {
-                        prevDigit = '2';
-                        //i += 2;
-                        //print("found two\n", .{});
-                    } else if (i + 5 <= line.len and std.mem.eql(u8, line[i .. i + 5], "three")) {
-                        prevDigit = '3';
-                        //i += 4;
-                        //print("found three\n", .{});
-                    }
-                },
-                'f' => {
-                    if (i + 4 <= line.len and std.mem.eql(u8, line[i .. i + 4], "four")) {
-                        prevDigit = '4';
-                        //i += 3;
-                        //print("found four\n", .{});
-                    } else if (i + 4 <= line.len and std.mem.eql(u8, line[i .. i + 4], "five")) {
-                        prevDigit = '5';
-                        //i += 3;
-                        //print("found five\n", .{});
-                    }
-                },
-                's' => {
-                    if (i + 3 <= line.len and std.mem.eql(u8, line[i .. i + 3], "six")) {
-                        prevDigit = '6';
-                        //i += 2;
-                        //print("found six\n", .{});
-                    } else if (i + 5 <= line.len and std.mem.eql(u8, line[i .. i + 5], "seven")) {
-                        prevDigit = '7';
-                        //i += 4;
-                        //print("found seven\n", .{});
-                    }
-                },
-                'e' => {
-                    if (i + 5 <= line.len and std.mem.eql(u8, line[i .. i + 5], "eight")) {
-                        prevDigit = '8';
-                        //i += 4;
-                        //print("found eight\n", .{});
-                    }
-                },
-                'n' => {
-                    if (i + 4 <= line.len and std.mem.eql(u8, line[i .. i + 4], "nine")) {
-                        prevDigit = '9';
-                        //i += 3;
-                        //print("found nine\n", .{});
-                    }
-                },
-                else => {},
+            for (digit_names, 0..) |name, num| {
+                if (std.mem.startsWith(u8, line[i..], name)) {
+                    prevDigit = @as(u8, @intCast(num));
+                    break;
+                }
             }
         }
-        i += 1;
 
         if (prevDigit != null) {
             if (!firstFound) {
-                calibration += 10 * (prevDigit.? - '0');
+                calibration += 10 * (prevDigit.?);
                 firstFound = true;
             }
         }
     }
 
-    calibration += (prevDigit orelse '0') - '0';
-
-    print("line {s} calib2 = {d}\n", .{ line, calibration });
-
+    calibration += (prevDigit orelse 0);
     return calibration;
 }
 
