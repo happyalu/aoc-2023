@@ -50,10 +50,9 @@ fn getCalibrationPart1(line: []const u8) u32 {
 }
 
 fn getCalibrationPart2(line: []const u8) u32 {
-    var calibration: u32 = 0;
+    var first: ?u8 = null;
+    var last: ?u8 = null;
 
-    var firstFound: bool = false;
-    var prevDigit: ?u8 = null;
     var i: usize = 0;
 
     const digit_names = [_][]const u8{ "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
@@ -61,26 +60,21 @@ fn getCalibrationPart2(line: []const u8) u32 {
     while (i < line.len) : (i += 1) {
         var c: u8 = line[i];
         if (std.ascii.isDigit(c)) {
-            prevDigit = c - '0';
-        } else {
-            for (digit_names, 0..) |name, num| {
-                if (std.mem.startsWith(u8, line[i..], name)) {
-                    prevDigit = @as(u8, @intCast(num));
-                    break;
-                }
-            }
+            last = c - '0';
+            first = first orelse last;
+            continue;
         }
 
-        if (prevDigit != null) {
-            if (!firstFound) {
-                calibration += 10 * (prevDigit.?);
-                firstFound = true;
+        for (digit_names, 0..) |name, idx| {
+            if (std.mem.startsWith(u8, line[i..], name)) {
+                last = @as(u8, @intCast(idx));
+                first = first orelse last;
+                break;
             }
         }
     }
 
-    calibration += (prevDigit orelse 0);
-    return calibration;
+    return 10 * (first orelse 0) + (last orelse 0);
 }
 
 // Useful stdlib functions
