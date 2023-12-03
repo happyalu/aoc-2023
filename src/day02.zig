@@ -10,6 +10,11 @@ const gpa = util.gpa;
 
 const data = @embedFile("data/day02.txt");
 
+const ParseErr = error{
+    TooManyParts,
+    InvalidItem,
+};
+
 const CubeSet = struct {
     red: u32,
     green: u32,
@@ -59,28 +64,24 @@ const CubeSet = struct {
         }
         return false;
     }
-
     pub fn power(self: CubeSet) u32 {
         return self.red * self.green * self.blue;
     }
 };
 
-const ParseErr = error{
-    TooManyParts,
-    InvalidItem,
-};
-
 const Game = struct {
     id: u32,
-    sets: [20]CubeSet,
+    is_possible: bool,
+    min_set: CubeSet,
 
-    pub fn parse(line: []const u8) !Game {
+    pub fn parse(line: []const u8, bag: CubeSet) !Game {
         // example line:
         // Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
 
         var g = Game{
             .id = 0,
-            .sets = [_]CubeSet{CubeSet.init(0, 0, 0)} ** 20,
+            .is_possible = true,
+            .min_set = CubeSet.init(0, 0, 0),
         };
 
         var iter = tokenizeSeq(u8, line, ":");
@@ -96,39 +97,25 @@ const Game = struct {
         g.id = try parseInt(u32, game_str[5..], 10);
 
         var sets_iter = tokenizeSeq(u8, sets_str, ";");
-        var i: usize = 0;
-        while (sets_iter.next()) |set_str| : (i += 1) {
-            g.sets[i] = try CubeSet.parse(set_str);
+        while (sets_iter.next()) |set_str| {
+            var cs = try CubeSet.parse(set_str);
+            if (!bag.contains(cs)) {
+                g.is_possible = false;
+            }
+            if (g.min_set.red < cs.red) {
+                g.min_set.red = cs.red;
+            }
+
+            if (g.min_set.green < cs.green) {
+                g.min_set.green = cs.green;
+            }
+
+            if (g.min_set.blue < cs.blue) {
+                g.min_set.blue = cs.blue;
+            }
         }
 
         return g;
-    }
-
-    pub fn isPossible(self: Game, bag: CubeSet) bool {
-        for (self.sets) |s| {
-            if (!bag.contains(s)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    pub fn requiredBag(self: Game) CubeSet {
-        var b = CubeSet.init(0, 0, 0);
-
-        for (self.sets) |s| {
-            if (b.red < s.red) {
-                b.red = s.red;
-            }
-            if (b.green < s.green) {
-                b.green = s.green;
-            }
-            if (b.blue < s.blue) {
-                b.blue = s.blue;
-            }
-        }
-        return b;
     }
 };
 
@@ -144,13 +131,13 @@ pub fn main() !void {
             continue;
         }
 
-        var g = try Game.parse(line);
+        var g = try Game.parse(line, bag);
 
-        if (g.isPossible(bag)) {
+        if (g.is_possible) {
             id_sum += g.id;
         }
 
-        power_sum += g.requiredBag().power();
+        power_sum += g.min_set.power();
     }
 
     print("id sum = {d}\n", .{id_sum});
