@@ -26,20 +26,20 @@ pub fn main() !void {
     var temperature_to_humidity_map = try AlmanacMap.read(iter.next().?);
     var humidity_to_location_map = try AlmanacMap.read(iter.next().?);
 
-    var ans1: usize = std.math.maxInt(usize);
-
     var allMaps = [_]AlmanacMap{ seed_to_soil_map, soil_to_fertilizer_map, fertilizer_to_water_map, water_to_light_map, light_to_temperature_map, temperature_to_humidity_map, humidity_to_location_map };
+
+    var finalMap: AlmanacMap = allMaps[0];
+    for (allMaps[1..]) |m| {
+        finalMap = try finalMap.compose(m);
+    }
+
+    var ans1: usize = std.math.maxInt(usize);
 
     // problem 1
     while (seeds.next()) |s| {
         var seed = try parseInt(usize, s, 10);
-        var out: usize = seed;
-        for (allMaps) |m| {
-            out = m.map(out);
-        }
-
+        var out: usize = finalMap.map(seed);
         ans1 = if (ans1 < out) ans1 else out;
-        print("seed: {d} => location: {d}\n", .{ seed, out });
     }
 
     print("ans1: {d}\n", .{ans1});
@@ -54,15 +54,28 @@ pub fn main() !void {
         var x = try parseInt(usize, begin, 10);
         var y = try parseInt(usize, range, 10);
 
-        print("processing {d} to {d}\n", .{ x, x + y - 1 });
+        var r = Range{
+            .dest_start = x,
+            .src_start = x,
+            .range_length = y,
+        };
 
-        while (y > 0) : (y -= 1) {
-            var out: usize = x + y - 1;
-            for (allMaps) |m| {
-                out = m.map(out);
+        var am = AlmanacMap{
+            .name = "seed",
+            .ranges = std.ArrayList(Range).init(gpa),
+        };
+
+        try am.ranges.append(r);
+        var locations = try am.compose(finalMap);
+
+        var out: usize = std.math.maxInt(usize);
+        for (locations.ranges.items) |i| {
+            if (i.dest_start < out) {
+                out = i.dest_start;
             }
-            ans2 = if (ans2 < out) ans2 else out;
         }
+
+        ans2 = if (ans2 < out) ans2 else out;
     }
 
     print("ans2: {d}\n", .{ans2});
@@ -79,16 +92,45 @@ const Range = struct {
 
         return self.dest_start + (x - self.src_start);
     }
+
+    pub fn format(value: @This(), comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) std.os.WriteError!void {
+        return writer.print("[{d}--{d}) => [{d}--{d})", .{ value.src_start, value.src_start + value.range_length, value.dest_start, value.dest_start + value.range_length });
+    }
+
+    fn overlapOffset(self: Range, other: Range) ?usize {
+        var a = self.src_start;
+        var b = self.src_start + self.range_length;
+        var c = other.src_start;
+        var d = other.src_start + other.range_length;
+
+        if (a >= d or b <= c) {
+            return null;
+        }
+
+        if (a < c) {
+            return c - a;
+        }
+
+        if (d < b) {
+            return d - a;
+        }
+
+        if (a >= c and b <= d) {
+            return b - a;
+        }
+
+        return null;
+    }
 };
 
 const AlmanacMap = struct {
     name: []const u8,
-    ranges: std.BoundedArray(Range, 64),
+    ranges: std.ArrayList(Range),
 
     fn read(str: []const u8) !AlmanacMap {
         var out: AlmanacMap = .{
             .name = undefined,
-            .ranges = try std.BoundedArray(Range, 64).init(0),
+            .ranges = std.ArrayList(Range).init(gpa),
         };
 
         var iter = tokenizeSeq(u8, str, "\n");
@@ -107,18 +149,77 @@ const AlmanacMap = struct {
             try out.ranges.append(Range{ .dest_start = p1, .src_start = p2, .range_length = p3 });
         }
 
+        out.sortRanges();
+
+        if (out.ranges.items[0].src_start != 0) {
+            try out.ranges.insert(0, Range{
+                .src_start = 0,
+                .dest_start = 0,
+                .range_length = out.ranges.items[0].src_start,
+            });
+        }
+
+        var x = out.ranges.items[out.ranges.items.len - 1];
+
+        try out.ranges.append(Range{
+            .dest_start = x.src_start + x.range_length,
+            .src_start = x.src_start + x.range_length,
+            .range_length = std.math.maxInt(usize) - x.src_start - x.range_length,
+        });
+
         return out;
     }
 
     fn map(self: AlmanacMap, x: usize) usize {
         var out: ?usize = null;
 
-        for (self.ranges.buffer) |r| {
+        for (self.ranges.items) |r| {
             out = r.map(x);
             if (out != null) return out.?;
         }
 
         return x;
+    }
+
+    fn compareRanges(_: void, a: Range, b: Range) bool {
+        return if (a.src_start < b.src_start) true else false;
+    }
+
+    fn sortRanges(self: AlmanacMap) void {
+        std.sort.heap(Range, self.ranges.items, {}, compareRanges);
+    }
+
+    fn compose(self: AlmanacMap, other: AlmanacMap) !AlmanacMap {
+        var out = AlmanacMap{
+            .name = "composed",
+            .ranges = std.ArrayList(Range).init(gpa),
+        };
+
+        for (self.ranges.items) |x| {
+            var y = Range{
+                .src_start = x.dest_start,
+                .range_length = x.range_length,
+                .dest_start = 0,
+            };
+
+            for (other.ranges.items) |z| {
+                var o = y.overlapOffset(z);
+                if (o != null) {
+                    var r = Range{
+                        .src_start = x.src_start + (y.src_start - x.dest_start),
+                        .dest_start = other.map(self.map(x.src_start + y.src_start - x.dest_start)),
+                        .range_length = o.?,
+                    };
+
+                    try out.ranges.append(r);
+                    y.src_start += o.?;
+                    y.range_length -= o.?;
+                }
+            }
+        }
+
+        out.sortRanges();
+        return out;
     }
 };
 
