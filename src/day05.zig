@@ -28,11 +28,13 @@ pub fn main() !void {
 
     var ans1: usize = std.math.maxInt(usize);
 
+    var allMaps = [_]AlmanacMap{ seed_to_soil_map, soil_to_fertilizer_map, fertilizer_to_water_map, water_to_light_map, light_to_temperature_map, temperature_to_humidity_map, humidity_to_location_map };
+
     // problem 1
     while (seeds.next()) |s| {
         var seed = try parseInt(usize, s, 10);
         var out: usize = seed;
-        for ([_]AlmanacMap{ seed_to_soil_map, soil_to_fertilizer_map, fertilizer_to_water_map, water_to_light_map, light_to_temperature_map, temperature_to_humidity_map, humidity_to_location_map }) |m| {
+        for (allMaps) |m| {
             out = m.map(out);
         }
 
@@ -40,7 +42,30 @@ pub fn main() !void {
         print("seed: {d} => location: {d}\n", .{ seed, out });
     }
 
-    print("min_location: {d}\n", .{ans1});
+    print("ans1: {d}\n", .{ans1});
+
+    // problem 2
+    var ans2: usize = std.math.maxInt(usize);
+    seeds.reset();
+
+    while (seeds.next()) |begin| {
+        var range = seeds.next().?;
+
+        var x = try parseInt(usize, begin, 10);
+        var y = try parseInt(usize, range, 10);
+
+        print("processing {d} to {d}\n", .{ x, x + y - 1 });
+
+        while (y > 0) : (y -= 1) {
+            var out: usize = x + y - 1;
+            for (allMaps) |m| {
+                out = m.map(out);
+            }
+            ans2 = if (ans2 < out) ans2 else out;
+        }
+    }
+
+    print("ans2: {d}\n", .{ans2});
 }
 
 const Range = struct {
