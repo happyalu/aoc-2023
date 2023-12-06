@@ -44,15 +44,8 @@ pub fn main() !void {
 }
 
 fn findMatches(t: usize, d: usize) usize {
-    // the match starting point is very close to the quadratic solution of i * (t-i) > d.
-    var i: usize = (t - std.math.sqrt(t * t - 4 * d)) / 2 - 1;
-
-    // find the first match
-    while (i < t) : (i += 1) {
-        if (i * (t - i) > d) {
-            break;
-        }
-    }
+    // the match starting point is the quadratic solution of i * (t-i) > d.
+    var i: usize = (1 + t - std.math.sqrt(t * t - 4 * d)) / 2;
 
     // count numbers from i to (t-i)
     return (t - 2 * i + 1);
@@ -60,7 +53,6 @@ fn findMatches(t: usize, d: usize) usize {
 
 const tokenizeAny = std.mem.tokenizeAny;
 const parseInt = std.fmt.parseInt;
-const print = std.debug.print;
 
 // Generated from template/template.zig.
 // Run `zig build generate` to update.
