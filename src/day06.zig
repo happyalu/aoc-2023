@@ -1,15 +1,7 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const List = std.ArrayList;
-const Map = std.AutoHashMap;
-const StrMap = std.StringHashMap;
-const BitSet = std.DynamicBitSet;
 
-const util = @import("util.zig");
-const gpa = util.gpa;
-
-const data = @embedFile("data/day06.example.txt");
-//const data = @embedFile("data/day06.txt");
+//const data = @embedFile("data/day06.example.txt");
+const data = @embedFile("data/day06.txt");
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -20,58 +12,55 @@ pub fn main() !void {
     _ = iter.next(); // Distance;
     var iter_dist = tokenizeAny(u8, iter.next().?, " ");
 
-    // part1
-    var part1: u32 = 1;
+    var part1: usize = 1;
+    var part2: usize = 0;
+
+    // hold the unsplit numbers (part 2 input).
+    // max usize is a 20 digit number
+    var t_buf = try std.BoundedArray(u8, 21).init(0);
+    var d_buf = try std.BoundedArray(u8, 21).init(0);
+
+    // solve part1 first.
     while (true) {
         var t_str = iter_time.next() orelse break;
         var d_str = iter_dist.next() orelse unreachable;
 
+        try t_buf.appendSlice(t_str);
+        try d_buf.appendSlice(d_str);
+
         var t = try parseInt(u32, t_str, 10);
         var d = try parseInt(u32, d_str, 10);
 
-        var matches: u32 = 0;
-
-        var i: u32 = 1;
-        while (i < t) : (i += 1) {
-            if (i * (t - i) > d) {
-                matches += 1;
-            }
-        }
-
-        part1 *= matches;
+        part1 *= findMatches(t, d);
     }
 
-    const part2 = 0;
+    // part2
+    var t = try parseInt(usize, t_buf.slice(), 10);
+    var d = try parseInt(usize, d_buf.slice(), 10);
+
+    part2 += findMatches(t, d);
 
     std.debug.print("part1 {} part2 {}\nmain() total time {}\n", .{ part1, part2, std.fmt.fmtDuration(timer.read()) });
 }
 
-// Useful stdlib functions
+fn findMatches(t: usize, d: usize) usize {
+    // the match starting point is very close to the quadratic solution of i * (t-i) > d.
+    var i: usize = (t - std.math.sqrt(t * t - 4 * d)) / 2 - 1;
+
+    // find the first match
+    while (i < t) : (i += 1) {
+        if (i * (t - i) > d) {
+            break;
+        }
+    }
+
+    // count numbers from i to (t-i)
+    return (t - 2 * i + 1);
+}
+
 const tokenizeAny = std.mem.tokenizeAny;
-const tokenizeSeq = std.mem.tokenizeSequence;
-const tokenizeSca = std.mem.tokenizeScalar;
-const splitAny = std.mem.splitAny;
-const splitSeq = std.mem.splitSequence;
-const splitSca = std.mem.splitScalar;
-const indexOf = std.mem.indexOfScalar;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfStr = std.mem.indexOfPosLinear;
-const lastIndexOf = std.mem.lastIndexOfScalar;
-const lastIndexOfAny = std.mem.lastIndexOfAny;
-const lastIndexOfStr = std.mem.lastIndexOfLinear;
-const trim = std.mem.trim;
-const sliceMin = std.mem.min;
-const sliceMax = std.mem.max;
-
 const parseInt = std.fmt.parseInt;
-const parseFloat = std.fmt.parseFloat;
-
 const print = std.debug.print;
-const assert = std.debug.assert;
-
-const sort = std.sort.block;
-const asc = std.sort.asc;
-const desc = std.sort.desc;
 
 // Generated from template/template.zig.
 // Run `zig build generate` to update.
