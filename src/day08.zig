@@ -55,14 +55,10 @@ pub fn main() !void {
     timer.reset();
 
     var next_nodes = part2_start_nodes;
-    var loop_lengths = std.ArrayList(usize).init(alloc);
+    var part2: usize = 1;
 
     for (next_nodes.items) |n| {
-        try loop_lengths.append(getTurnsToFinal(n, &turn, Part.two));
-    }
-
-    var part2: usize = 1;
-    for (loop_lengths.items) |x| {
+        var x = getTurnsToFinal(n, &turn, Part.two);
         part2 = lcm(part2, x);
     }
 
