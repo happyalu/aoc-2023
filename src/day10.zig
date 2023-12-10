@@ -42,9 +42,6 @@ pub fn main() !void {
                 var west_node = if (x == 0) null else &nodes.items[y * n + (x - 1)];
                 var east_node = if (x == n - 1) null else &nodes.items[y * n + (x + 1)];
 
-                cur_node.x = x;
-                cur_node.y = y;
-
                 switch (c) {
                     '|' => {
                         cur_node.north = north_node;
@@ -85,43 +82,24 @@ pub fn main() !void {
         }
     }
 
-    var max_dist: usize = 0;
-    var max_path: *Node = undefined;
-
-    // Find the largest loop, not the shortest. We don't know how the start node connects.
-    for ([_]?*Node{ start_node.north, start_node.east, start_node.south, start_node.west }) |x| {
-        if (x != null) {
-            start_node.visited = true;
-            x.?.dfs(1);
-
-            for ([_]?*Node{ start_node.north, start_node.east, start_node.south, start_node.west }) |y| {
-                if (y != null) {
-                    var z = (1 + (y.?.distance orelse 0)) / 2;
-                    if (max_dist < z) {
-                        max_dist = z;
-                        max_path = x.?;
-                    }
-                }
-            }
-
-            for (nodes.items) |*y| {
-                y.visited = false;
-                y.distance = null;
-            }
-        }
-    }
-
-    start_node.visited = true;
-    // mark the longest path again.
-    max_path.dfs(1);
-
     // correct connections of start node
     if (start_node.north != null and start_node.north.?.south == null) start_node.north = null;
     if (start_node.south != null and start_node.south.?.north == null) start_node.south = null;
     if (start_node.east != null and start_node.east.?.west == null) start_node.east = null;
     if (start_node.west != null and start_node.west.?.east == null) start_node.west = null;
 
-    const part1 = max_dist;
+    start_node.dfs(0);
+    var max_dist: usize = 0;
+
+    for ([_]?*Node{ start_node.north, start_node.east, start_node.south, start_node.west }) |x| {
+        if (x != null) {
+            max_dist = @max(max_dist, x.?.distance orelse 0);
+        }
+    }
+
+    const part1 = (1 + max_dist) / 2;
+
+    var part2: usize = 0;
 
     // horizontal ray tracing to count for | L and J connections.
     for (0..n) |y| {
@@ -137,21 +115,14 @@ pub fn main() !void {
                     cross_count += 1;
                 }
             } else {
-                nodes.items[idx].ray_count = cross_count;
+                part2 += (cross_count % 2);
             }
-        }
-    }
-
-    var part2: usize = 0;
-    for (nodes.items) |x| {
-        if (x.ray_count % 2 == 1) {
-            part2 += 1;
         }
     }
 
     print("part1: {}\n", .{part1});
     print("part2: {}\n", .{part2});
-    print("main() total time: {}\n", .{std.fmt.fmtDuration(timer.read())});
+    print("day10 main() total time: {}\n", .{std.fmt.fmtDuration(timer.read())});
 }
 
 const Node = struct {
@@ -161,9 +132,6 @@ const Node = struct {
     east: ?*Node = null,
     distance: ?usize = null,
     visited: bool = false,
-    x: usize = 0,
-    y: usize = 0,
-    ray_count: usize = 0,
 
     fn dfs(self: *Node, dist: usize) void {
         if (self.visited) return;
