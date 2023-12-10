@@ -2,5 +2,5 @@ zig-cache/
 zig-out/
 build_runner.zig
 /src/data/*.txt
-!/src/data/*.example.txt
+!/src/data/*.example*.txt
 /src/data/day08.example.txt
