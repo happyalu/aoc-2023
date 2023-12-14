@@ -9,8 +9,44 @@ const util = @import("util.zig");
 const gpa = util.gpa;
 
 const data = @embedFile("data/day14.txt");
+//const data = @embedFile("data/day14.example.txt");
 
-pub fn main() !void {}
+pub fn main() !void {
+    var timer = try std.time.Timer.start();
+
+    var part1: usize = 0;
+
+    const w = std.mem.indexOfScalar(u8, data, '\n').?;
+    print("width={}\n", .{w});
+
+    const h = data.len / (w + 1);
+    print("h={}\n", .{h});
+
+    for (0..w) |x| {
+        var next_load = h;
+        for (0..h) |y| {
+            var ch = data[y * (w + 1) + x];
+            switch (ch) {
+                'O' => {
+                    print("char: {} {} = {}\n", .{ x, y, next_load });
+                    part1 += next_load;
+                    next_load -= 1;
+                },
+                '#' => {
+                    next_load = h - y - 1;
+                },
+                '.' => continue,
+                else => {
+                    print("failed {c}\n", .{ch});
+                    unreachable;
+                },
+            }
+        }
+    }
+
+    print("day 14 part1: {}\n", .{part1});
+    print("day 14 main() total: {}\n", .{std.fmt.fmtDuration(timer.read())});
+}
 
 // Useful stdlib functions
 const tokenizeAny = std.mem.tokenizeAny;
