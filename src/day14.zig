@@ -13,39 +13,135 @@ const data = @embedFile("data/day14.txt");
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
-
-    var part1: usize = 0;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var alloc = arena.allocator();
 
     const w = std.mem.indexOfScalar(u8, data, '\n').?;
-    print("width={}\n", .{w});
-
     const h = data.len / (w + 1);
-    print("h={}\n", .{h});
+    assert(w == h);
 
-    for (0..w) |x| {
-        var next_load = h;
-        for (0..h) |y| {
-            var ch = data[y * (w + 1) + x];
+    var board = try alloc.alloc(u8, w * w);
+
+    for (0..w) |i| {
+        for (0..w) |j| {
+            board[i * w + j] = data[i * (w + 1) + j];
+        }
+    }
+
+    var boardSeen = std.StringArrayHashMap(usize).init(alloc);
+    defer boardSeen.deinit();
+
+    var part1: usize = 0;
+    const num_cycles = 1000000000;
+    var c: usize = 1;
+    var cycle_length: ?usize = null;
+    cycles: while (c <= num_cycles) {
+        // north tilt
+        rotateClockwise(w, &board);
+        tiltEast(w, &board);
+        if (c == 1) {
+            part1 = getEastLoad(w, board);
+        }
+
+        // west tilt
+        rotateClockwise(w, &board);
+        tiltEast(w, &board);
+
+        // south tilt
+        rotateClockwise(w, &board);
+        tiltEast(w, &board);
+
+        // east tilt
+        rotateClockwise(w, &board);
+        tiltEast(w, &board);
+
+        if (cycle_length == null) {
+            var f = try alloc.dupe(u8, board);
+            var s = try boardSeen.getOrPut(f);
+            if (s.found_existing) {
+                var idx = s.value_ptr.*;
+                cycle_length = c - idx;
+
+                idx = (num_cycles - idx) % (cycle_length.?) + idx;
+
+                var it = boardSeen.iterator();
+                while (it.next()) |b| {
+                    if (b.value_ptr.* == idx) {
+                        std.mem.copy(u8, board, b.key_ptr.*);
+                        break :cycles;
+                    }
+                }
+            } else {
+                s.value_ptr.* = c;
+            }
+        }
+
+        c += 1;
+    }
+
+    rotateClockwise(w, &board);
+    var part2 = getEastLoad(w, board);
+
+    print("day 14 part1: {}\n", .{part1});
+    print("day 14 part2: {}\n", .{part2});
+    print("day 14 main() total: {}\n", .{std.fmt.fmtDuration(timer.read())});
+}
+
+fn tiltEast(n: usize, board: *[]u8) void {
+    for (0..n) |i| {
+        var line = board.*[i * n .. (i + 1) * n];
+        var next_free: usize = line.len - 1;
+        for (0..line.len) |jx| {
+            var j = line.len - jx - 1;
+            var ch = line[j];
             switch (ch) {
                 'O' => {
-                    print("char: {} {} = {}\n", .{ x, y, next_load });
-                    part1 += next_load;
-                    next_load -= 1;
+                    if (next_free != j) {
+                        line[next_free] = 'O';
+                        line[j] = '.';
+                    }
+                    if (j > 0) next_free -= 1;
+                },
+                '.' => {
+                    continue;
                 },
                 '#' => {
-                    next_load = h - y - 1;
+                    next_free = if (j > 0) j - 1 else 0;
                 },
-                '.' => continue,
-                else => {
-                    print("failed {c}\n", .{ch});
-                    unreachable;
-                },
+                else => unreachable,
+            }
+        }
+    }
+}
+
+fn rotateClockwise(n: usize, board: *[]u8) void {
+    var a = board.*;
+
+    for (0..n) |i| {
+        for (0..i) |j| {
+            var temp = a[i * n + j];
+            a[i * n + j] = a[j * n + i];
+            a[j * n + i] = temp;
+        }
+    }
+
+    for (0..n) |i| {
+        std.mem.reverse(u8, a[i * n .. (i + 1) * n]);
+    }
+}
+
+fn getEastLoad(n: usize, board: []u8) usize {
+    var out: usize = 0;
+    for (0..n) |i| {
+        for (0..n) |j| {
+            if (board[i * n + j] == 'O') {
+                out += 1 + j;
             }
         }
     }
 
-    print("day 14 part1: {}\n", .{part1});
-    print("day 14 main() total: {}\n", .{std.fmt.fmtDuration(timer.read())});
+    return out;
 }
 
 // Useful stdlib functions
