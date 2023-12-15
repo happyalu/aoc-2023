@@ -14,13 +14,15 @@ pub fn main() !void {
 
     var part1: usize = 0;
 
-    var hm = HashMap.init(alloc);
+    var hm: HashMap = .{
+        .slots = [1]std.ArrayListUnmanaged(Lens){.{}} ** 256,
+    };
     while (iter.next()) |x| {
         if (x.len == 0) continue;
         var res = hash(x);
         part1 += res;
 
-        try hm.runStep(x);
+        try hm.runStep(alloc, x);
     }
 
     print("day15 part1: {}\n", .{part1});
@@ -44,18 +46,9 @@ const Lens = struct {
 };
 
 const HashMap = struct {
-    slots: [256]std.ArrayList(Lens),
+    slots: [256]std.ArrayListUnmanaged(Lens),
 
-    fn init(alloc: std.mem.Allocator) HashMap {
-        var out: HashMap = undefined;
-        for (&out.slots) |*s| {
-            s.* = std.ArrayList(Lens).init(alloc);
-        }
-
-        return out;
-    }
-
-    fn runStep(self: *HashMap, step: []const u8) !void {
+    fn runStep(self: *HashMap, alloc: std.mem.Allocator, step: []const u8) !void {
         var opIdx = std.mem.indexOfAny(u8, step, "=-") orelse unreachable;
         var label = step[0..opIdx];
         var slot = hash(label);
@@ -70,7 +63,7 @@ const HashMap = struct {
                         break;
                     }
                 } else {
-                    try self.slots[slot].append(.{ .label = label, .power = p });
+                    try self.slots[slot].append(alloc, .{ .label = label, .power = p });
                 }
             },
             '-' => {
