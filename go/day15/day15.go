@@ -1,32 +1,40 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	_ "embed"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // //go:embed day15.example.txt
 //
 //go:embed day15.txt
-var data string
+var data []byte
 
 func main() {
 	var timer = time.Now()
 
 	var part1 uint
 	var hm HashMap
-	tokens := strings.Split(strings.TrimSpace(data), ",")
-	for _, t := range tokens {
-		if len(t) == 0 {
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Split(SplitComma)
+
+	for scanner.Scan() {
+		step := scanner.Text()
+
+		if len(step) == 0 {
 			continue
 		}
 
-		part1 += uint(hash(t))
-		if err := hm.RunStep(t); err != nil {
+		part1 += uint(hash(step))
+		if err := hm.RunStep(step); err != nil {
 			panic(err)
 		}
 	}
@@ -35,6 +43,32 @@ func main() {
 	fmt.Printf("day15 part2: %d\n", hm.Power())
 	fmt.Printf("day15 all main(): %s\n", time.Since(timer))
 
+}
+
+func SplitComma(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// Skip leading spaces.
+	start := 0
+	for width := 0; start < len(data); start += width {
+		var r rune
+		r, width = utf8.DecodeRune(data[start:])
+		if r != ',' {
+			break
+		}
+	}
+	// Scan until space, marking end of word.
+	for width, i := 0, start; i < len(data); i += width {
+		var r rune
+		r, width = utf8.DecodeRune(data[i:])
+		if r == ',' {
+			return i + width, data[start:i], nil
+		}
+	}
+	// If we're at EOF, we have a final, non-empty, non-terminated word. Return it.
+	if atEOF && len(data) > start {
+		return len(data), data[start:], nil
+	}
+	// Request more data.
+	return start, nil, nil
 }
 
 func hash(s string) uint8 {
