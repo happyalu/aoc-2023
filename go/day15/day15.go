@@ -1,0 +1,117 @@
+package main
+
+import (
+	_ "embed"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// //go:embed day15.example.txt
+//
+//go:embed day15.txt
+var data string
+
+func main() {
+	var timer = time.Now()
+
+	var part1 uint
+	var hm HashMap
+	tokens := strings.Split(strings.TrimSpace(data), ",")
+	for _, t := range tokens {
+		if len(t) == 0 {
+			continue
+		}
+
+		part1 += uint(hash(t))
+		if err := hm.RunStep(t); err != nil {
+			panic(err)
+		}
+	}
+
+	fmt.Printf("day15 part1: %d\n", part1)
+	fmt.Printf("day15 part2: %d\n", hm.Power())
+	fmt.Printf("day15 all main(): %s\n", time.Since(timer))
+
+}
+
+func hash(s string) uint8 {
+	var out uint16
+
+	for _, c := range s {
+		out += uint16(c)
+		out *= 17
+		out %= 256
+	}
+
+	return uint8(out)
+}
+
+type Lens struct {
+	label string
+	power uint8
+}
+
+type HashMap struct {
+	slots [256][]Lens
+}
+
+func (h *HashMap) RunStep(step string) error {
+	opIdx := strings.IndexAny(step, "=-")
+	label := step[0:opIdx]
+	slot := hash(label)
+	op := step[opIdx]
+
+	switch op {
+	case '=':
+		{
+			p_str := step[opIdx+1:]
+			p, err := strconv.ParseInt(p_str, 10, 8)
+			if err != nil {
+				return err
+			}
+
+			found := false
+			for i := range h.slots[slot] {
+				if h.slots[slot][i].label == label {
+					h.slots[slot][i].power = uint8(p)
+					found = true
+					break
+
+				}
+			}
+
+			if !found {
+				h.slots[slot] = append(h.slots[slot], Lens{
+					label: label,
+					power: uint8(p),
+				})
+			}
+		}
+	case '-':
+		{
+			for i := range h.slots[slot] {
+				if h.slots[slot][i].label == label {
+					h.slots[slot] = slices.Delete(h.slots[slot], i, i+1)
+					break
+				}
+			}
+		}
+	default:
+		return fmt.Errorf("Invalid operator")
+	}
+
+	return nil
+}
+
+func (h *HashMap) Power() uint {
+	var out uint
+	for slotIdx, s := range h.slots {
+		for lensIdx, l := range s {
+			out += uint((1 + slotIdx) * (1 + lensIdx) * int(l.power))
+		}
+	}
+	return out
+}
