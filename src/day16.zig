@@ -11,18 +11,32 @@ pub fn main() !void {
 
     var grid = Grid.init(data);
 
-    var part1 = try solve(alloc, grid, .{ .x = 0, .y = 0, .dir = Dir.Right });
+    var energized = std.AutoHashMap(usize, void).init(alloc);
+    defer energized.deinit();
+    var visited = std.AutoHashMap(Ray, void).init(alloc);
+    defer visited.deinit();
+
+    var rays = std.ArrayList(Ray).init(alloc);
+    defer rays.deinit();
+
+    var state = State{
+        .energized = energized,
+        .visited = visited,
+        .rays = rays,
+    };
+
+    var part1 = try solve(&state, grid, .{ .x = 0, .y = 0, .dir = Dir.Right });
 
     var part2: usize = 0;
     for (0..grid.w) |y| {
-        var e = try solve(alloc, grid, .{ .x = 0, .y = y, .dir = Dir.Right });
-        var f = try solve(alloc, grid, .{ .x = grid.w - 1, .y = y, .dir = Dir.Left });
+        var e = try solve(&state, grid, .{ .x = 0, .y = y, .dir = Dir.Right });
+        var f = try solve(&state, grid, .{ .x = grid.w - 1, .y = y, .dir = Dir.Left });
         part2 = @max(part2, e, f);
     }
 
     for (0..grid.w) |x| {
-        var e = try solve(alloc, grid, .{ .x = x, .y = 0, .dir = Dir.Down });
-        var f = try solve(alloc, grid, .{ .x = x, .y = grid.w - 1, .dir = Dir.Up });
+        var e = try solve(&state, grid, .{ .x = x, .y = 0, .dir = Dir.Down });
+        var f = try solve(&state, grid, .{ .x = x, .y = grid.w - 1, .dir = Dir.Up });
         part2 = @max(part2, e, f);
     }
 
@@ -44,24 +58,27 @@ const Grid = struct {
     }
 };
 
-fn solve(alloc: std.mem.Allocator, grid: Grid, ray: Ray) !usize {
-    var energized = std.AutoHashMap(usize, void).init(alloc);
-    defer energized.deinit();
-    var visited = std.AutoHashMap(Ray, void).init(alloc);
-    defer visited.deinit();
+const State = struct {
+    energized: std.AutoHashMap(usize, void),
+    visited: std.AutoHashMap(Ray, void),
+    rays: std.ArrayList(Ray),
+};
 
-    var rays = std.ArrayList(Ray).init(alloc);
-    defer rays.deinit();
-    try rays.append(ray);
+fn solve(state: *State, grid: Grid, ray: Ray) !usize {
+    state.energized.clearRetainingCapacity();
+    state.visited.clearRetainingCapacity();
+    state.rays.clearRetainingCapacity();
 
-    while (rays.popOrNull()) |item| {
+    try state.rays.append(ray);
+
+    while (state.rays.popOrNull()) |item| {
         var r = item;
         while (true) {
             //print("{any}\n", .{r});
-            var res = try visited.getOrPut(r);
+            var res = try state.visited.getOrPut(r);
             if (res.found_existing) break;
             res.value_ptr.* = {};
-            try energized.put(r.y * grid.w + r.x, {});
+            try state.energized.put(r.y * grid.w + r.x, {});
             const cell = grid.at(r.x, r.y);
             switch (cell) {
                 '.' => {
@@ -88,7 +105,7 @@ fn solve(alloc: std.mem.Allocator, grid: Grid, ray: Ray) !usize {
                         Dir.Left => r = r.move(Dir.Left, grid.w) orelse break,
                         Dir.Right => r = r.move(Dir.Right, grid.w) orelse break,
                         else => {
-                            try rays.append(r.move(Dir.Right, grid.w) orelse break);
+                            try state.rays.append(r.move(Dir.Right, grid.w) orelse break);
                             r = r.move(Dir.Left, grid.w) orelse break;
                         },
                     }
@@ -100,7 +117,7 @@ fn solve(alloc: std.mem.Allocator, grid: Grid, ray: Ray) !usize {
                         else => {
                             var r2 = r.move(Dir.Up, grid.w);
                             if (r2 != null) {
-                                try rays.append(r2.?);
+                                try state.rays.append(r2.?);
                             }
                             r = r.move(Dir.Down, grid.w) orelse break;
                             //print("{any}\n", .{r});
@@ -111,7 +128,7 @@ fn solve(alloc: std.mem.Allocator, grid: Grid, ray: Ray) !usize {
             }
         }
     }
-    return energized.count();
+    return state.energized.count();
 }
 
 const Ray = struct {
