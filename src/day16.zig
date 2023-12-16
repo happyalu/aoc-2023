@@ -8,8 +8,8 @@ const BitSet = std.DynamicBitSet;
 const util = @import("util.zig");
 const gpa = util.gpa;
 
-const data = @embedFile("data/day16.txt");
-//const data = @embedFile("data/day16.example.txt");
+//const data = @embedFile("data/day16.txt");
+const data = @embedFile("data/day16.example.txt");
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -17,22 +17,50 @@ pub fn main() !void {
     defer arena.deinit();
     var alloc = arena.allocator();
 
-    var grid = struct {
-        const Self = @This();
-        w: usize = std.mem.indexOf(u8, data, "\n").?,
+    var grid = Grid.init(data);
 
-        fn at(self: Self, x: usize, y: usize) u8 {
-            return data[y * (self.w + 1) + x];
-        }
-    }{};
+    var part1 = try solve(alloc, grid, .{ .x = 0, .y = 0, .dir = Dir.Right });
 
-    //print("w: {}\n", .{grid.w});
+    var part2: usize = 0;
+    for (0..grid.w) |y| {
+        var e = try solve(alloc, grid, .{ .x = 0, .y = y, .dir = Dir.Right });
+        var f = try solve(alloc, grid, .{ .x = grid.w - 1, .y = y, .dir = Dir.Left });
+        part2 = @max(part2, e, f);
+    }
 
+    for (0..grid.w) |x| {
+        var e = try solve(alloc, grid, .{ .x = x, .y = 0, .dir = Dir.Down });
+        var f = try solve(alloc, grid, .{ .x = x, .y = grid.w - 1, .dir = Dir.Up });
+        part2 = @max(part2, e, f);
+    }
+
+    print("day16 part1: {}\n", .{part1});
+    print("day16 part1: {}\n", .{part2});
+    print("day16 all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
+}
+
+const Grid = struct {
+    data: []const u8,
+    w: usize,
+
+    fn init(d: []const u8) Grid {
+        return .{ .data = d, .w = std.mem.indexOf(u8, data, "\n").? };
+    }
+
+    fn at(self: Grid, x: usize, y: usize) u8 {
+        return self.data[y * (self.w + 1) + x];
+    }
+};
+
+fn solve(alloc: std.mem.Allocator, grid: Grid, ray: Ray) !usize {
     var energized = std.AutoHashMap(usize, void).init(alloc);
+    defer energized.deinit();
     var visited = std.AutoHashMap(Ray, void).init(alloc);
+    defer visited.deinit();
 
     var rays = std.ArrayList(Ray).init(alloc);
-    try rays.append(.{});
+    defer rays.deinit();
+    try rays.append(ray);
 
     while (rays.popOrNull()) |item| {
         var r = item;
@@ -91,9 +119,7 @@ pub fn main() !void {
             }
         }
     }
-
-    print("day16 part1: {}\n", .{energized.count()});
-    print("day16 all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
+    return energized.count();
 }
 
 const Ray = struct {
