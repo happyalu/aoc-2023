@@ -167,13 +167,8 @@ const Rule = struct {
             return self.next;
         }
 
-        var val = switch (self.cat) {
-            'x' => part[0],
-            'm' => part[1],
-            'a' => part[2],
-            's' => part[3],
-            else => unreachable,
-        };
+        var idx = std.mem.indexOfScalar(u8, "xmas", self.cat).?;
+        var val = part[idx];
 
         switch (self.op) {
             '<' => if (val < self.val) return self.next,
