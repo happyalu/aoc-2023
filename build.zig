@@ -34,7 +34,7 @@ pub fn build(b: *Build) void {
     });
 
     const run_generate = b.addRunArtifact(build_generate);
-    run_generate.cwd = std.fs.path.dirname(@src().file);
+    run_generate.setCwd(.{ .path = std.fs.path.dirname(@src().file).? });
 
     generate.dependOn(&run_generate.step);
 
