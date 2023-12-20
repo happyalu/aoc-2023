@@ -151,17 +151,11 @@ fn solve(broadcast_mod: *Module, rx_conj_modules: std.BoundedArray(*Module, 10))
                 const im = Impulse{ .conn = c, .pulse = output.? };
                 counter.add(im);
 
-                if (std.mem.eql(u8, c.module.name, "rx") and output.? == .low) {
-                    out[1] = btn_count;
-                    return out;
-                }
-
                 try q.insert(0, im);
             }
         }
     }
 
-    out[0] = counter.value();
     out[1] = 1;
     for (conj_cycle.slice()) |c| {
         out[1] *= c.?;
