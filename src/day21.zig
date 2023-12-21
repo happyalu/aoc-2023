@@ -1,17 +1,15 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const List = std.ArrayList;
-const Map = std.AutoHashMap;
-const StrMap = std.StringHashMap;
-const BitSet = std.DynamicBitSet;
 
-const util = @import("util.zig");
-const gpa = util.gpa;
+const data_actual = Data.init(@embedFile("data/day21.txt"));
+const data_example = Data.init(@embedFile("data/day21.example.txt"));
 
-const data_actual = @embedFile("data/day21.txt");
-const data_example = @embedFile("data/day21.example.txt");
+const Part = enum { one, two };
 
-const debug = true;
+const Move = struct { idx: usize, off: FieldOffset };
+
+const Fields = std.AutoArrayHashMap(FieldOffset, void);
+
+const FieldOffset = @Vector(2, isize);
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -20,182 +18,161 @@ pub fn main() !void {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    if (debug) {
-        //        assert(try solve(alloc, data_example, 6, Part.one) == 16);
-    }
+    var moves = std.AutoHashMap(usize, [4]?Move).init(alloc);
+    defer moves.deinit();
 
-    //const part1 = try solve(alloc, data_actual, 64, Part.one);
+    const part1 = try solve(alloc, data_actual, 64, Part.one, &moves);
 
-    if (debug) {
-        //assert(try solve(alloc, data_example, 6, Part.two) == 16);
-        //assert(try solve(alloc, data_example, 10, Part.two) == 50);
-        //print("{}\n", .{try solve(alloc, data_example, 50, Part.two)});
-        assert(try solve(alloc, data_example, 50, Part.two) == 1594);
-        assert(try solve(alloc, data_example, 100, Part.two) == 6536);
-        assert(try solve(alloc, data_example, 500, Part.two) == 167004);
-        assert(try solve(alloc, data_example, 1000, Part.two) == 668697);
-        //assert(try solve(alloc, data_example, 5000, Part.two) == 16733044);
-    }
+    // part2:
+    // 26501365 = 202300 * 131 + 65 for grid of square 131
+    assert(data_actual.w == 131);
+    assert(@divExact(data_actual.data.len, data_actual.w) == 132);
+    // f(n) f(n+2W), f(n+3W) is quadratic (found this hint somewhere).
+    const f0 = try solve(alloc, data_actual, 65, Part.two, &moves);
+    const f1 = try solve(alloc, data_actual, 65 + 131, Part.two, &moves);
+    const f2 = try solve(alloc, data_actual, 65 + 131 * 2, Part.two, &moves);
 
-    //print("day21 part1: {}\n", .{part1});
+    const b0 = f0;
+    const b1 = f1 - f0;
+    const b2 = f2 - f1;
+    const n: usize = 202300;
+    const part2 = b0 + b1 * n + (n * (n - 1) / 2) * (b2 - b1);
+
+    print("day21 part1: {}\n", .{part1});
+    print("day21 part2: {}\n", .{part2});
     print("day21 all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
 }
 
-const InfiniteField = struct {
-    x_off: isize,
-    y_off: isize,
-    k: usize,
-};
+fn solve(alloc: std.mem.Allocator, data: Data, steps: usize, part: Part, moves: *std.AutoHashMap(usize, [4]?Move)) !usize {
+    var cur_places = std.AutoArrayHashMap(usize, Fields).init(alloc);
+    var next_places = std.AutoArrayHashMap(usize, Fields).init(alloc);
 
-fn solve(alloc: std.mem.Allocator, data: []const u8, step_count: usize, part: Part) !usize {
-    var cur_places = std.AutoArrayHashMap(InfiniteField, void).init(alloc);
-    var next_places = std.AutoArrayHashMap(InfiniteField, void).init(alloc);
+    for (0..data.data.len) |i| {
+        try cur_places.put(i, Fields.init(alloc));
+        try next_places.put(i, Fields.init(alloc));
+    }
 
     defer cur_places.deinit();
     defer next_places.deinit();
 
-    try cur_places.put(.{ .x_off = 0, .y_off = 0, .k = std.mem.indexOfScalar(u8, data, 'S').? }, {});
+    var start = Fields.init(alloc);
+    try start.put(.{ 0, 0 }, {});
+    try cur_places.put(std.mem.indexOfScalar(u8, data.data, 'S').?, start);
 
-    const w = std.mem.indexOfScalar(u8, data, '\n').?;
-
-    for (0..step_count) |step| {
-        _ = step;
-        next_places.clearRetainingCapacity();
+    for (0..steps) |_| {
+        for (next_places.keys()) |k| {
+            next_places.getPtr(k).?.clearRetainingCapacity();
+        }
 
         for (cur_places.keys()) |key| {
-            const k = key.k;
-            switch (part) {
-                .one => {
-                    // west?
-                    if ((k) % (w + 1) > 0 and data[k - 1] != '#') {
-                        try next_places.put(.{ .x_off = key.x_off, .y_off = key.y_off, .k = k - 1 }, {});
-                    }
+            if (cur_places.get(key).?.count() == 0) continue;
+            const res = try moves.getOrPut(key);
+            if (!res.found_existing) {
+                const m = data.move(key, part);
+                res.value_ptr.* = m;
+            }
 
-                    // east?
-                    if ((k + 1) % (w + 1) < w and data[k + 1] != '#') {
-                        try next_places.put(.{ .x_off = key.x_off, .y_off = key.y_off, .k = k + 1 }, {});
-                    }
+            const mlist = res.value_ptr.*;
 
-                    // north?
-                    if (k > (w + 1) and data[k - (w + 1)] != '#') {
-                        try next_places.put(.{ .x_off = key.x_off, .y_off = key.y_off, .k = k - (w + 1) }, {});
-                    }
+            for (mlist) |m| {
+                if (m == null) continue;
 
-                    // south?
-                    if ((k + (w + 1)) < data.len and data[k + (w + 1)] != '#') {
-                        try next_places.put(.{ .x_off = key.x_off, .y_off = key.y_off, .k = k + (w + 1) }, {});
-                    }
-                },
-                .two => {
-                    var n: usize = undefined;
-                    var x: isize = undefined;
-                    var y: isize = undefined;
-
-                    // west
-                    if (k % (w + 1) == 0) {
-                        n = k + w - 1;
-                        x = key.x_off - 1;
-                        y = key.y_off;
-                    } else {
-                        n = k - 1;
-                        x = key.x_off;
-                        y = key.y_off;
-                    }
-
-                    if (data[n] != '#') {
-                        try next_places.put(.{ .x_off = x, .y_off = y, .k = n }, {});
-                        //print("{} {} -> {} {}\n", .{ k / (w + 1), k % (w + 1), n / (w + 1), n % (w + 1) });
-                    }
-
-                    // east
-                    if ((k + 1) % (w + 1) == w) {
-                        n = (k + 1) - w;
-                        x = key.x_off + 1;
-                        y = key.y_off;
-                    } else {
-                        n = k + 1;
-                        x = key.x_off;
-                        y = key.y_off;
-                    }
-
-                    if (data[n] != '#') {
-                        try next_places.put(.{ .x_off = x, .y_off = y, .k = n }, {});
-                        //print("{} {} -> {} {}\n", .{ k / (w + 1), k % (w + 1), n / (w + 1), n % (w + 1) });
-                    }
-
-                    // north?
-                    if (k < w) {
-                        n = data.len - (w + 1) + k;
-                        x = key.x_off;
-                        y = key.y_off - 1;
-                    } else {
-                        n = (k - (w + 1));
-                        x = key.x_off;
-                        y = key.y_off;
-                    }
-
-                    if (data[n] != '#') {
-                        try next_places.put(.{ .x_off = x, .y_off = y, .k = n }, {});
-                        //print("{} {} -> {} {}\n", .{ k / (w + 1), k % (w + 1), n / (w + 1), n % (w + 1) });
-                    }
-
-                    // south?
-                    if (k + (w + 1) >= data.len) {
-                        n = (k + (w + 1)) % data.len;
-                        x = key.x_off;
-                        y = key.y_off + 1;
-                    } else {
-                        n = (k + (w + 1));
-                        x = key.x_off;
-                        y = key.y_off;
-                    }
-
-                    if (data[n] != '#') {
-                        try next_places.put(.{ .x_off = x, .y_off = y, .k = n }, {});
-                        //print("{} {} -> {} {}\n", .{ k / (w + 1), k % (w + 1), n / (w + 1), n % (w + 1) });
-                    }
-                },
+                const n = m.?.idx;
+                //print("{}\n", .{n});
+                const res2 = next_places.getPtr(n).?;
+                for (cur_places.get(key).?.keys()) |cur_item| {
+                    //print("{any}\n", .{cur_item});
+                    try res2.put(m.?.off + cur_item, {});
+                }
             }
         }
 
-        //print("after step {}\n{any}\n", .{ step, next_places.keys() });
         const tmp = cur_places;
         cur_places = next_places;
         next_places = tmp;
     }
 
-    return cur_places.keys().len;
+    var ans: usize = 0;
+
+    for (cur_places.keys()) |k| {
+        ans += cur_places.get(k).?.keys().len;
+    }
+
+    return ans;
 }
 
-const Part = enum { one, two };
+const Data = struct {
+    data: []const u8,
+    w: usize,
 
-// Useful stdlib functions
-const tokenizeAny = std.mem.tokenizeAny;
-const tokenizeSeq = std.mem.tokenizeSequence;
-const tokenizeSca = std.mem.tokenizeScalar;
-const splitAny = std.mem.splitAny;
-const splitSeq = std.mem.splitSequence;
-const splitSca = std.mem.splitScalar;
-const indexOf = std.mem.indexOfScalar;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfStr = std.mem.indexOfPosLinear;
-const lastIndexOf = std.mem.lastIndexOfScalar;
-const lastIndexOfAny = std.mem.lastIndexOfAny;
-const lastIndexOfStr = std.mem.lastIndexOfLinear;
-const trim = std.mem.trim;
-const sliceMin = std.mem.min;
-const sliceMax = std.mem.max;
+    fn init(d: []const u8) Data {
+        const w = std.mem.indexOfScalar(u8, d, '\n').?;
+        return .{ .data = d, .w = w };
+    }
 
-const parseInt = std.fmt.parseInt;
-const parseFloat = std.fmt.parseFloat;
+    fn trymove(self: Data, m: Move) ?Move {
+        return if (self.data[m.idx] != '#') m else null;
+    }
+
+    fn move(self: Data, k: usize, part: Part) [4]?Move {
+        var out: [4]?Move = [_]?Move{null} ** 4;
+
+        switch (part) {
+            .one => {
+                // west?
+                if ((k) % (self.w + 1) > 0 and self.data[k - 1] != '#') {
+                    out[0] = self.trymove(.{ .idx = k - 1, .off = .{ 0, 0 } });
+                }
+
+                // east?
+                if ((k + 1) % (self.w + 1) < self.w and self.data[k + 1] != '#') {
+                    out[1] = self.trymove(.{ .idx = k + 1, .off = .{ 0, 0 } });
+                }
+
+                // north?
+                if (k > (self.w + 1) and self.data[k - (self.w + 1)] != '#') {
+                    out[2] = self.trymove(.{ .idx = k - (self.w + 1), .off = .{ 0, 0 } });
+                }
+
+                // south?
+                if ((k + (self.w + 1)) < self.data.len and self.data[k + (self.w + 1)] != '#') {
+                    out[3] = self.trymove(.{ .idx = k + (self.w + 1), .off = .{ 0, 0 } });
+                }
+            },
+            .two => {
+                //west
+                if (k % (self.w + 1) == 0) {
+                    out[0] = self.trymove(.{ .idx = k + self.w - 1, .off = .{ -1, 0 } });
+                } else {
+                    out[0] = self.trymove(.{ .idx = k - 1, .off = .{ 0, 0 } });
+                }
+
+                //east
+                if ((k + 1) % (self.w + 1) == self.w) {
+                    out[1] = self.trymove(.{ .idx = k + 1 - self.w, .off = .{ 1, 0 } });
+                } else {
+                    out[1] = self.trymove(.{ .idx = k + 1, .off = .{ 0, 0 } });
+                }
+
+                //north
+                if (k < self.w) {
+                    out[2] = self.trymove(.{ .idx = self.data.len - (self.w + 1) + k, .off = .{ 0, -1 } });
+                } else {
+                    out[2] = self.trymove(.{ .idx = k - (self.w + 1), .off = .{ 0, 0 } });
+                }
+
+                //south
+                if (k + self.w + 1 >= self.data.len) {
+                    out[3] = self.trymove(.{ .idx = (k + self.w + 1) % self.data.len, .off = .{ 0, 1 } });
+                } else {
+                    out[3] = self.trymove(.{ .idx = k + (self.w + 1), .off = .{ 0, 0 } });
+                }
+            },
+        }
+
+        return out;
+    }
+};
 
 const print = std.debug.print;
 const assert = std.debug.assert;
-
-const sort = std.sort.block;
-const asc = std.sort.asc;
-const desc = std.sort.desc;
-
-// Generated from template/template.zig.
-// Run `zig build generate` to update.
-// Only unmodified days will be updated.
