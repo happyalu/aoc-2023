@@ -8,6 +8,8 @@ const BitSet = std.DynamicBitSet;
 const util = @import("util.zig");
 const gpa = util.gpa;
 
+const Part = enum { one, two };
+
 const data = @embedFile("data/day23.txt");
 //const data = @embedFile("data/day23.example.txt");
 
@@ -26,32 +28,37 @@ pub fn main() !void {
     const start = std.mem.indexOfScalar(u8, data, '.').?;
     const end = std.mem.lastIndexOfScalar(u8, data, '.').?;
 
-    var visited = std.AutoHashMap(usize, void).init(alloc);
+    var visited = std.AutoArrayHashMap(usize, void).init(alloc);
     defer visited.deinit();
 
-    const part1 = try dfs(start, w, end, &visited);
+    const part1 = try dfs(start, w, end, &visited, Part.one);
+    const part2 = try dfs(start, w, end, &visited, Part.two);
 
     print("day23: part1: {}\n", .{part1});
+    print("day23: part2: {}\n", .{part2});
     print("day23: all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
 }
 
-fn dfs(i: usize, w: usize, end: usize, visited: *std.AutoHashMap(usize, void)) !usize {
-    if (i == end) return 0;
-
-    try visited.put(i, {});
-    defer _ = visited.remove(i);
-
-    var out: usize = 0;
-    for (moves(i, w)) |m| {
-        if (m == null) break;
-        if (visited.get(m.?) != null) continue;
-        out = @max(out, try dfs(m.?, w, end, visited));
+fn dfs(i: usize, w: usize, end: usize, visited: *std.AutoArrayHashMap(usize, void), part: Part) !usize {
+    if (i == end) {
+        //print("Part: {}, {any}\n", .{ part, visited.keys().len });
+        return visited.keys().len;
     }
 
-    return out + 1;
+    try visited.put(i, {});
+    defer _ = visited.swapRemove(i);
+
+    var out: usize = 0;
+    for (moves(i, w, part)) |m| {
+        if (m == null) break;
+        if (visited.get(m.?) != null) continue;
+        out = @max(out, try dfs(m.?, w, end, visited, part));
+    }
+
+    return out;
 }
 
-fn moves(i: usize, w: usize) [4]?usize {
+fn moves(i: usize, w: usize, part: Part) [4]?usize {
     var out: [4]?usize = .{null} ** 4;
     var n: usize = 0;
 
@@ -60,7 +67,7 @@ fn moves(i: usize, w: usize) [4]?usize {
     var north = false;
     var south = false;
 
-    switch (data[i]) {
+    switch (if (part == .one) data[i] else '.') {
         '>' => east = true,
         'v' => south = true,
         '<' => west = true,
