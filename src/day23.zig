@@ -10,8 +10,8 @@ const gpa = util.gpa;
 
 const Part = enum { one, two };
 
-const data = @embedFile("data/day23.txt");
-//const data = @embedFile("data/day23.example.txt");
+//const data = @embedFile("data/day23.txt");
+const data = @embedFile("data/day23.example.txt");
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -19,9 +19,6 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-
-    var q = std.PriorityQueue(PointCost, void, PointCost.lessThan).init(alloc, {});
-    defer q.deinit();
 
     const w = std.mem.indexOfScalar(u8, data, '\n').?;
 
@@ -31,35 +28,45 @@ pub fn main() !void {
     var visited = std.AutoArrayHashMap(usize, void).init(alloc);
     defer visited.deinit();
 
-    const part1 = try dfs(start, w, end, &visited, Part.one);
-    const part2 = try dfs(start, w, end, &visited, Part.two);
+    const part1 = try dfs(.{ .next = start, .weight = 0 }, w, end, &visited, Part.one);
+    const part2 = try dfs(.{ .next = start, .weight = 0 }, w, end, &visited, Part.two);
 
-    print("day23: part1: {}\n", .{part1});
-    print("day23: part2: {}\n", .{part2});
+    print("day23: part1: {}\n", .{part1.?});
+    print("day23: part2: {}\n", .{part2.?});
     print("day23: all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
 }
 
-fn dfs(i: usize, w: usize, end: usize, visited: *std.AutoArrayHashMap(usize, void), part: Part) !usize {
-    if (i == end) {
-        //print("Part: {}, {any}\n", .{ part, visited.keys().len });
-        return visited.keys().len;
+fn dfs(e: Edge, w: usize, end: usize, visited: *std.AutoArrayHashMap(usize, void), part: Part) !?usize {
+    if (e.next == end) {
+        return 1;
     }
 
-    try visited.put(i, {});
-    defer _ = visited.swapRemove(i);
+    try visited.put(e.next, {});
+    defer _ = visited.swapRemove(e.next);
 
     var out: usize = 0;
-    for (moves(i, w, part)) |m| {
+    var ok = false;
+    for (moves(e.next, w, part)) |m| {
+        if (m == null) continue;
+        if (visited.get(m.?.next) != null) continue;
         if (m == null) break;
-        if (visited.get(m.?) != null) continue;
-        out = @max(out, try dfs(m.?, w, end, visited, part));
+        const x = try dfs(m.?, w, end, visited, part);
+        if (x != null) {
+            ok = true;
+            out = @max(out, x.?);
+        }
     }
 
-    return out;
+    return if (ok) out + e.weight else null;
 }
 
-fn moves(i: usize, w: usize, part: Part) [4]?usize {
-    var out: [4]?usize = .{null} ** 4;
+const Edge = struct {
+    next: usize,
+    weight: usize,
+};
+
+fn moves(i: usize, w: usize, part: Part) [4]?Edge {
+    var out: [4]?Edge = .{null} ** 4;
     var n: usize = 0;
 
     var west = false;
@@ -83,7 +90,7 @@ fn moves(i: usize, w: usize, part: Part) [4]?usize {
     // west
     if (west and i % (w + 1) != 0) {
         if (data[i - 1] != '#') {
-            out[n] = i - 1;
+            out[n] = .{ .next = i - 1, .weight = 1 };
             n += 1;
         }
     }
@@ -91,7 +98,7 @@ fn moves(i: usize, w: usize, part: Part) [4]?usize {
     // east
     if (east and i % (w + 1) != w) {
         if (data[i + 1] != '#') {
-            out[n] = i + 1;
+            out[n] = .{ .next = i + 1, .weight = 1 };
             n += 1;
         }
     }
@@ -99,7 +106,7 @@ fn moves(i: usize, w: usize, part: Part) [4]?usize {
     // north
     if (north and i > (w + 1)) {
         if (data[i - (w + 1)] != '#') {
-            out[n] = i - (w + 1);
+            out[n] = .{ .next = i - (w + 1), .weight = 1 };
             n += 1;
         }
     }
@@ -107,23 +114,13 @@ fn moves(i: usize, w: usize, part: Part) [4]?usize {
     // south
     if (south and i + (w + 1) < data.len) {
         if (data[i + (w + 1)] != '#') {
-            out[n] = i + (w + 1);
+            out[n] = .{ .next = i + (w + 1), .weight = 1 };
             n += 1;
         }
     }
 
     return out;
 }
-
-const PointCost = struct {
-    idx: usize,
-    cost: isize,
-    visited: *std.AutoHashMap(usize, void),
-
-    fn lessThan(_: void, a: PointCost, b: PointCost) std.math.Order {
-        return std.math.order(a.cost, b.cost);
-    }
-};
 
 // Useful stdlib functions
 const tokenizeAny = std.mem.tokenizeAny;
