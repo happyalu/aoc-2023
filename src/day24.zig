@@ -9,7 +9,7 @@ const util = @import("util.zig");
 const gpa = util.gpa;
 
 const data = @embedFile("data/day24.txt");
-const limits: [2]Pf = .{ .{ 200000000000000, 200000000000000, 200000000000000 }, .{ 400000000000000, 400000000000000, 400000000000000 } };
+const limits: [2]Pf = .{ .{ 200000000000000, 200000000000000, 0 }, .{ 400000000000000, 400000000000000, 0 } };
 
 //const data = @embedFile("data/day24.example.txt");
 //const limits: [2]Pf = .{ .{ 7, 7, 0 }, .{ 27, 27, 0 } };
@@ -28,14 +28,48 @@ pub fn main() !void {
         for (i + 1..stones.items.len) |j| {
             const b = stones.items[j];
 
-            if (a.pathsCrossXY(b, limits, true)) {
+            if (a.pathsCrossXY(b)) {
                 part1 += 1;
             }
         }
     }
 
-    print("day24: part1: {}\n", .{part1});
+    // part2
+    var part2: isize = 0;
+    var vel_range = try std.BoundedArray(isize, 1000).init(0);
+    for (0..500) |u| {
+        const i: isize = @intCast(u);
+        try vel_range.append(i);
+        try vel_range.append(-1 * i);
+    }
 
+    const s1 = stones.items[0];
+    const s2 = stones.items[1];
+    const s3 = stones.items[2];
+    vxloop: for (vel_range.slice()) |vx| {
+        for (vel_range.slice()) |vy| {
+            for (vel_range.slice()) |vz| {
+                var s1_new = s1;
+                var s2_new = s2;
+                var s3_new = s3;
+                s1_new.vel -= .{ vx, vy, vz };
+                s2_new.vel -= .{ vx, vy, vz };
+                s3_new.vel -= .{ vx, vy, vz };
+
+                const x1 = s1_new.integerIntersect(s2_new);
+                const x2 = s2_new.integerIntersect(s3_new);
+                if (x1 != null and x2 != null) {
+                    if (@reduce(.And, x1.? == x2.?)) {
+                        part2 = @reduce(.Add, x1.?);
+                        break :vxloop;
+                    }
+                }
+            }
+        }
+    }
+
+    print("day24: part1: {}\n", .{part1});
+    print("day24: part2: {}\n", .{part2});
     print("day24: all main(): {}\n", .{std.fmt.fmtDuration(timer.read())});
 }
 
@@ -63,23 +97,18 @@ const Stone = struct {
     pos: P,
     vel: P,
 
-    fn pathsCrossXY(self: Stone, other: Stone, lim: [2]Pf, noz: bool) bool {
+    fn pathsCrossXY(self: Stone, other: Stone) bool {
         //print("comparing {} with {}\n", .{ self, other });
         var a = self;
         var b = other;
-        var l = lim;
-        if (noz) {
-            a.pos[2] = 0;
-            a.vel[2] = 0;
-            b.pos[2] = 0;
-            b.vel[2] = 0;
-            l[0][2] = 0;
-            l[1][2] = 0;
-        }
+        a.pos[2] = 0;
+        a.vel[2] = 0;
+        b.pos[2] = 0;
+        b.vel[2] = 0;
 
         const d: f64 = @floatFromInt((a.vel[0] * b.vel[1]) - (a.vel[1] * b.vel[0]));
         if (d == 0) {
-            print("{} and {}\n", .{ self, other });
+            //print("{} and {}\n", .{ self, other });
             return false; // parallel paths
         }
 
@@ -92,15 +121,38 @@ const Stone = struct {
 
         const cx: f64 = @as(f64, @floatFromInt(a.pos[0])) + t1 * @as(f64, @floatFromInt(a.vel[0]));
         const cy: f64 = @as(f64, @floatFromInt(a.pos[1])) + t1 * @as(f64, @floatFromInt(a.vel[1]));
-        const cz: f64 = @as(f64, @floatFromInt(a.pos[2])) + t1 * @as(f64, @floatFromInt(a.vel[2]));
 
-        const collision = Pf{ cx, cy, if (noz) 0 else cz };
+        const collision = Pf{ cx, cy, 0 };
 
-        if (@reduce(.Or, collision < l[0])) return false; // outside area
-        if (@reduce(.Or, collision > l[1])) return false; // outside area
+        if (@reduce(.Or, collision < limits[0])) return false; // outside area
+        if (@reduce(.Or, collision > limits[1])) return false; // outside area
 
         //print("true {}\n", .{collision});
         return true;
+    }
+
+    fn integerIntersect(self: Stone, other: Stone) ?P {
+        const a = self;
+        const b = other;
+
+        const d = a.vel[0] * b.vel[1] - a.vel[1] * b.vel[0];
+        if (d == 0) return null;
+
+        const c1 = b.pos - a.pos;
+
+        const t1_num = (c1[0] * b.vel[1] - c1[1] * b.vel[0]);
+        const t2_num = (c1[0] * a.vel[1] - c1[1] * a.vel[0]);
+
+        if (@mod(t1_num, d) != 0) return null;
+        if (@mod(t2_num, d) != 0) return null;
+
+        const t1: P = @splat(@divExact(t1_num, d));
+        const t2: P = @splat(@divExact(t2_num, d));
+
+        if (t1[0] < 0 or t2[0] < 0) return null;
+
+        const intersect = a.pos + t1 * a.vel;
+        return intersect;
     }
 };
 
