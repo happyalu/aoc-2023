@@ -46,18 +46,18 @@ pub fn main() !void {
             for (vel_range.slice()) |vz| {
                 var s1_new = s1;
                 var s2_new = s2;
-                var s3_new = s3;
                 s1_new.vel -= .{ vx, vy, vz };
                 s2_new.vel -= .{ vx, vy, vz };
+
+                const x1 = s1_new.integerIntersect(s2_new) orelse continue;
+
+                var s3_new = s3;
                 s3_new.vel -= .{ vx, vy, vz };
 
-                const x1 = s1_new.integerIntersect(s2_new);
-                const x2 = s2_new.integerIntersect(s3_new);
-                if (x1 != null and x2 != null) {
-                    if (@reduce(.And, x1.? == x2.?)) {
-                        part2 = @reduce(.Add, x1.?);
-                        break :vxloop;
-                    }
+                const x2 = s2_new.integerIntersect(s3_new) orelse continue;
+                if (@reduce(.And, x1 == x2)) {
+                    part2 = @reduce(.Add, x1);
+                    break :vxloop;
                 }
             }
         }
