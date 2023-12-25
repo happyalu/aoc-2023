@@ -1,12 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const List = std.ArrayList;
-const Map = std.AutoHashMap;
-const StrMap = std.StringHashMap;
-const BitSet = std.DynamicBitSet;
-
-const util = @import("util.zig");
-const gpa = util.gpa;
 
 const data = @embedFile("data/day25.txt");
 //const data = @embedFile("data/day25.example.txt");
@@ -51,7 +43,6 @@ const Graph = struct {
     symbols: std.AutoHashMap(usize, []const u8),
     nodes: std.StringArrayHashMap(usize),
     edges: std.ArrayList(Edge),
-    node_group: std.AutoArrayHashMap(usize, usize),
 
     fn init(alloc: std.mem.Allocator) !Graph {
         return .{
@@ -59,7 +50,6 @@ const Graph = struct {
             .nodes = std.StringArrayHashMap(usize).init(alloc),
             .edges = std.ArrayList(Edge).init(alloc),
             .symbols = std.AutoHashMap(usize, []const u8).init(alloc),
-            .node_group = std.AutoArrayHashMap(usize, usize).init(alloc),
         };
     }
 
@@ -69,7 +59,6 @@ const Graph = struct {
         if (!res.found_existing) {
             res.value_ptr.* = node_count;
             try self.symbols.put(node_count, name);
-            try self.node_group.put(node_count, node_count);
         }
         return res.value_ptr.*;
     }
@@ -87,7 +76,6 @@ const Graph = struct {
             .nodes = try self.nodes.clone(),
             .symbols = try self.symbols.clone(),
             .edges = try self.edges.clone(),
-            .node_group = try self.node_group.clone(),
         };
     }
 
@@ -97,59 +85,48 @@ const Graph = struct {
         }
     }
 
-    fn min_cut(oldself: *Graph, rand: std.rand.Random, need_cuts: usize) !usize {
+    fn min_cut(oldself: Graph, rand: std.rand.Random, need_cuts: usize) !usize {
         var cuts: usize = 0;
         var self = try oldself.clone();
+        var subsets = try std.ArrayList(Subset).initCapacity(oldself.alloc, self.nodes.count());
+
         while (cuts != need_cuts) {
-            for (self.nodes.values()) |v| {
-                try self.node_group.put(v, v);
+            subsets.clearRetainingCapacity();
+            subsets.expandToCapacity();
+
+            for (subsets.items, 0..) |*s, idx| {
+                s.parent = idx;
+                s.rank = 0;
             }
+
             var node_count = self.nodes.count();
             while (node_count > 2) {
                 const idx = rand.intRangeLessThan(usize, 0, self.edges.items.len);
-
                 const merge = self.edges.items[idx];
-                const nga = self.node_group.get(merge.a).?;
-                const ngb = self.node_group.get(merge.b).?;
 
-                if (nga == ngb) continue;
+                const subset1 = subsetFind(subsets.items, merge.a);
+                const subset2 = subsetFind(subsets.items, merge.b);
 
-                //print("merging node {} into {}\n", .{ merge.a, merge.b });
+                if (subset1 == subset2) continue;
+
                 node_count -= 1;
-
-                try self.node_group.put(ngb, nga);
-
-                for (self.node_group.keys()) |k| {
-                    if (self.node_group.get(k).? == nga) {
-                        try self.node_group.put(k, ngb);
-                    }
-                }
-
-                //for (self.node_group.keys()) |k| {
-                //                    print("ng {} => {}\n", .{ k, self.node_group.get(k).? });
-                //                }
+                subsetUnion(subsets.items, subset1, subset2);
             }
-
-            //for (self.node_group.keys()) |k| {
-            //print("ng {} => {}\n", .{ k, self.node_group.get(k).? });
-            //}
 
             cuts = 0;
             for (self.edges.items) |e| {
-                const nga = self.node_group.get(e.a).?;
-                const ngb = self.node_group.get(e.b).?;
+                const subset1 = subsetFind(subsets.items, e.a);
+                const subset2 = subsetFind(subsets.items, e.b);
 
-                if (nga != ngb) cuts += 1;
+                if (subset1 != subset2) cuts += 1;
             }
-
-            //print("{any} {any}\n", .{ node_count, cuts });
         }
 
         var c = std.AutoArrayHashMap(usize, usize).init(oldself.alloc);
         defer c.deinit();
 
-        for (self.node_group.values()) |v| {
-            const res = try c.getOrPut(v);
+        for (subsets.items) |s| {
+            const res = try c.getOrPut(s.parent);
             if (!res.found_existing) {
                 res.value_ptr.* = 1;
             } else res.value_ptr.* += 1;
@@ -163,34 +140,31 @@ const Graph = struct {
     }
 };
 
+const Subset = struct {
+    parent: usize,
+    rank: usize,
+};
 
-// Useful stdlib functions
-const tokenizeAny = std.mem.tokenizeAny;
-const tokenizeSeq = std.mem.tokenizeSequence;
-const tokenizeSca = std.mem.tokenizeScalar;
-const splitAny = std.mem.splitAny;
-const splitSeq = std.mem.splitSequence;
-const splitSca = std.mem.splitScalar;
-const indexOf = std.mem.indexOfScalar;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfStr = std.mem.indexOfPosLinear;
-const lastIndexOf = std.mem.lastIndexOfScalar;
-const lastIndexOfAny = std.mem.lastIndexOfAny;
-const lastIndexOfStr = std.mem.lastIndexOfLinear;
-const trim = std.mem.trim;
-const sliceMin = std.mem.min;
-const sliceMax = std.mem.max;
+fn subsetFind(subsets: []Subset, i: usize) usize {
+    if (subsets[i].parent != i) {
+        subsets[i].parent = subsetFind(subsets, subsets[i].parent);
+    }
 
-const parseInt = std.fmt.parseInt;
-const parseFloat = std.fmt.parseFloat;
+    return subsets[i].parent;
+}
+
+fn subsetUnion(subsets: []Subset, x: usize, y: usize) void {
+    const xroot = subsetFind(subsets, x);
+    const yroot = subsetFind(subsets, y);
+
+    if (subsets[xroot].rank < subsets[yroot].rank) {
+        subsets[xroot].parent = yroot;
+    } else if (subsets[xroot].rank > subsets[yroot].rank) {
+        subsets[yroot].parent = xroot;
+    } else {
+        subsets[yroot].parent = xroot;
+        subsets[xroot].rank += 1;
+    }
+}
 
 const print = std.debug.print;
-const assert = std.debug.assert;
-
-const sort = std.sort.block;
-const asc = std.sort.asc;
-const desc = std.sort.desc;
-
-// Generated from template/template.zig.
-// Run `zig build generate` to update.
-// Only unmodified days will be updated.
